@@ -1,0 +1,2 @@
+times 300*100 db 0x8F
+times 300*100 db 0x00

@@ -17,7 +17,7 @@ dd 0x00CF9200
 
 ;2 svga
 dd 0x0000FFFF
-dd 0xe0cf9200
+dd 0x00cf9200
 
 ;3 code
 dd 0x0000FFFF
@@ -31,14 +31,16 @@ SELECTOR_svga	equ (0x0002 << 3)
 SELECTOR_code	equ (0x0003 << 3)
 
 gdt_ptr dw GDT_LIMIT
-        dd GDT_BASE
+        dd 0x0000900
 
 start:
 mov ax, 0x4F02
         mov bx, 0x010F
+;        mov bx, 0x0112
         int 10h
 
-
+;jmp liner
+;jmp enter_pm
 
     mov edx, VBE_INDEX
     mov eax, VBE_ENABLE
@@ -54,7 +56,54 @@ mov ax, 0x4F02
     mov eax, 0x41
     OUT dx, ax
 
-        mov ax, 0x9000
+
+	mov ax, 0x8F
+	mov ds, ax 
+	mov al, 24
+	mov [0], al
+	mov ax,0x900
+	mov [1], ax
+
+	mov ax, 0x90
+	mov ds, ax
+	mov ax, 0
+	mov [0], ax
+	mov [2], ax
+	mov [4], ax
+	mov [6], ax
+	mov ax,0xFFFF
+	mov [8], ax
+	mov ax,0x0000
+	mov [10], ax
+	mov ax,0x9200
+	mov [12], ax
+	mov ax,0x00CF
+	mov [14], ax
+
+	mov ax,0xFFFF
+	mov [16], ax
+	mov ax,0x0000
+	mov [18], ax
+	mov ax,0x9200
+	mov [20], ax
+	mov ax,0x00CF
+	mov [22], ax
+
+
+	mov ax,0xFFFF
+	mov [24], ax
+	mov ax,0x0000
+	mov [26], ax
+	mov ax,0x9A00
+	mov [28], ax
+	mov ax,0x00CF
+	mov [30], ax
+
+		mov ax, 0
+		mov ds, ax
+liner:
+
+        mov ax, 0x900
         mov es, ax
         mov di, 0
         mov ax, 0x4F01
@@ -62,6 +111,13 @@ mov ax, 0x4F02
         int 0x10
 
         mov ebx, [es:40]   ;ebx liner video memery addr
+		mov ax, 0x90
+		mov es, ax
+		mov word [es:18],bx
+		shr ebx,16
+		mov byte [es:20],bl
+		mov byte [es:23],bh
+
 
 ;=============== 
         ; 打开A20地址线
@@ -71,6 +127,8 @@ mov ax, 0x4F02
 
         ; 加载gdt
         lgdt [gdt_ptr]
+
+		cli
 
         ; cr0第0位置1
         mov eax, cr0
@@ -94,8 +152,11 @@ p_mode_start:
     mov ecx, 0
     mov edx, 0
 
+
+;	jmp readdone
+
     mov eax, 2
-    mov ebx, 0x9000
+    mov ebx, 0x10000
     mov ecx, 240
 
 rd_disk_m_32:
@@ -106,7 +167,7 @@ rd_disk_m_32:
     mov al, cl
     out dx, al
 
-    mov eax, esi 
+    mov eax, esi
 
     mov dx, 0x1f3
     out dx, al
@@ -131,14 +192,14 @@ rd_disk_m_32:
     out dx, al
 
 .not_ready:
-    nop 
+    nop
     in al, dx
     and al, 0x88
     cmp al, 0x08
     jnz .not_ready
 
     mov ax, di
-    mov dx, 256 
+    mov dx, 256
     mul dx
     mov cx, ax
     mov dx, 0x1f0
@@ -148,15 +209,15 @@ rd_disk_m_32:
     mov [ds:ebx], ax
     add ebx, 2
     loop .go_on_read
-
-
+readdone:
 	mov eax, 0
 	mov ebx, 0
 	mov ecx, 60*3
 	mov edx, 0
     ;ebx line pos,   edx, img pos,  ecx,graph pos
 draw:
-    mov byte al, [ebx+edx+0x9000]
+    mov byte al, [ds:ebx+edx+0x10000]
+	;mov byte al, 0xF0
     mov byte [gs:ebx+ecx],al
     inc ebx
     cmp ebx,600
@@ -165,7 +226,7 @@ draw:
     add ecx,960
     add edx,600
 c2:
-    cmp edx,600*201
+    cmp edx,600*200
     jnz draw
     jmp $
 
