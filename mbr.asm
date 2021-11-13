@@ -17,7 +17,7 @@ dd 0x00CF9200
 
 ;2 svga
 dd 0x0000FFFF
-dd 0x00cf9200
+dd 0xf0cf9200
 
 ;3 code
 dd 0x0000FFFF
@@ -32,6 +32,7 @@ SELECTOR_code	equ (0x0003 << 3)
 
 gdt_ptr dw GDT_LIMIT
         dd 0x0000900
+
 
 start:
 mov ax, 0x4F02
@@ -119,6 +120,72 @@ liner:
 		mov byte [es:23],bh
 
 
+;I will create a 'flat' hard disk image with
+;  cyl=20
+;  heads=16
+;  sectors per track=63
+;  total sectors=20160
+;  total size=9.84 megabytes;
+
+
+        mov        BX,    0         ; ES:BX表示读到内存的地址 0x0800*16 + 0 = 0x8000
+        mov ax, 0x900
+        mov es, ax
+        mov            ch,0 ;CH = low eight bits of cylinder number
+        mov            cl,3 ;CL = sector number 1-63 (bits 0-5)
+        MOV        DH,00H   ;DH = head number
+
+load_left:
+        call sectorload
+        inc cl
+        cmp cl, 64
+        jnz load_left
+        inc dh
+        mov cl,1
+        cmp dh,16
+        jnz load_left
+
+        mov dh,0
+        inc ch
+        cmp ch, 3
+        jnz load_left
+        jmp done
+
+sectorload:
+        MOV        AH,02H            ; AH=0x02 : AH设置为0x02表示读取磁盘
+        MOV        AL,1            ; 要读取的扇区数
+        MOV        DL,80H           ; 驱动器号，0表示第一个软盘，是的，软盘。。硬盘C:80H C 硬盘D:81H
+        INT        13H               ; 调用BIOS 13号中断，磁盘相关功能
+        JC  error
+        mov ax,es
+        add ax,32; 512 / 16
+        mov es,ax
+        cmp ax,0x3000
+        jz done
+        ret
+
+error:
+jmp $
+done:
+;----DISK - READ SECTOR(S) INTO MEMORY
+;AH = 02h
+;AL = number of sectors to read (must be nonzero)
+;CH = low eight bits of cylinder number
+;CL = sector number 1-63 (bits 0-5)
+;high two bits of cylinder (bits 6-7, hard disk only)
+;DH = head number
+;DL = drive number (bit 7 set for hard disk)
+;ES:BX -> data buffer
+;
+;Return:
+;CF set on error
+;if AH = 11h (corrected ECC error), AL = burst length
+;CF clear if successful
+;AH = status (see #00234)
+;AL = number of sectors transferred (only valid if CF set for some
+;BIOSes)
+
+
 ;=============== 
         ; 打开A20地址线
         in al, 0x92
@@ -152,71 +219,13 @@ p_mode_start:
     mov ecx, 0
     mov edx, 0
 
-
-;	jmp readdone
-
-    mov eax, 2
-    mov ebx, 0x10000
-    mov ecx, 240
-
-rd_disk_m_32:
-    mov esi, eax
-    mov di, cx
-
-    mov dx, 0x1f2
-    mov al, cl
-    out dx, al
-
-    mov eax, esi
-
-    mov dx, 0x1f3
-    out dx, al
-
-    mov cl, 8
-    shr eax, cl
-    mov dx, 0x1f4
-    out dx, al
-
-    shr eax, cl
-    mov dx, 0x1f5
-    out dx, al
-
-    shr eax, cl
-    and al, 0x0f
-    or al, 0xe0
-    mov dx, 0x1f6
-    out dx, al
-
-    mov dx, 0x1f7
-    mov al, 0x20
-    out dx, al
-
-.not_ready:
-    nop
-    in al, dx
-    and al, 0x88
-    cmp al, 0x08
-    jnz .not_ready
-
-    mov ax, di
-    mov dx, 256
-    mul dx
-    mov cx, ax
-    mov dx, 0x1f0
-
-.go_on_read:
-    in ax, dx
-    mov [ds:ebx], ax
-    add ebx, 2
-    loop .go_on_read
-readdone:
 	mov eax, 0
 	mov ebx, 0
 	mov ecx, 60*3
 	mov edx, 0
     ;ebx line pos,   edx, img pos,  ecx,graph pos
 draw:
-    mov byte al, [ds:ebx+edx+0x10000]
+    mov byte al, [ds:ebx+edx+0x9000]
 	;mov byte al, 0xF0
     mov byte [gs:ebx+ecx],al
     inc ebx
