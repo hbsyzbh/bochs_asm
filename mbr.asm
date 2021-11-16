@@ -5,25 +5,15 @@ VBE_BANK equ 5
 VBE_INDEX equ 0x01CE
 VBE_DATA equ 0x01CF
 
+str_buf equ 0x100
+
 SECTION MBR vstart=0x7c00
     mov sp, 0x7c00
+	mov esi,0
 	jmp start
 
-GDT_BASE: dd 0x00000000
-          dd 0x00000000
-;1 whole
-dd 0x0000FFFF
-dd 0x00CF9200
 
-;2 svga
-dd 0x0000FFFF
-dd 0xf0cf9200
-
-;3 code
-dd 0x0000FFFF
-dd 0x00CF9A00
-
-GDT_SIZE equ $ - GDT_BASE
+GDT_SIZE equ 4*8
 GDT_LIMIT equ GDT_SIZE - 1
 
 SELECTOR_whole	equ (0x0001 << 3)
@@ -33,8 +23,153 @@ SELECTOR_code	equ (0x0003 << 3)
 gdt_ptr dw GDT_LIMIT
         dd 0x0000900
 
-
 start:
+    mov ah,3
+    mov bh,0
+    int 0x10
+
+;jmp test
+
+	;---- es:di
+	mov ax, str_buf
+	mov es, ax
+	mov di,0
+	mov ax, 0x4F00
+	int 10h
+
+	mov dx,0
+	mov cx, 5
+	call printf
+
+	mov ax, [es:0x0E]
+	mov si, ax
+	mov ax, [es:0x10]
+	mov ds, ax
+
+next_gmode:
+	mov cx, [ds:si]
+	cmp cx, 0xFFFF
+	jz end
+	mov di, 0
+	mov ax, 0x92
+	mov es, ax
+	mov ax, 0x4F01
+	int 10h
+
+	mov eax,0
+	mov ax, [es:0x12]
+	mov bx, 0
+	call int_cat
+
+	mov al, 'x'
+	mov bx, 4
+	call char_cat
+
+	mov eax,0
+	mov ax, [es:0x14]
+	mov bx, 5
+	call int_cat
+
+	mov al, 'x'
+	mov bx, 9
+	call char_cat
+
+	mov eax,0
+	mov al, [es:0x19]
+	cmp al,24
+	jc skip_cur
+	mov bx, 10
+	call int_cat
+
+	mov ecx, 14
+	call  printf
+
+skip_cur:
+	inc si
+	jmp next_gmode
+
+end:
+jmp $
+
+	;-- cx len  es:bp str
+;BH = page number.
+;BL = attribute if string contains only characters.
+;CX = number of characters in string.
+;DH,DL = row,column at which to start writing.
+;ES:BP -> string to write
+printf:
+	push es
+	mov ax, str_buf
+	mov es, ax
+	mov ax, 0x1301
+	mov bx, 3
+	mov dl, 0
+    int 10h
+	inc dh
+	pop es
+	ret
+
+	;-- al the char, bx -pos
+char_cat:
+	push ds
+	push ax
+	mov ax, str_buf
+	mov ds, ax
+	pop ax
+	mov [bx],al
+	pop ds
+	ret
+
+	;-- ax the int, bx -pos
+int_cat:
+	push es
+	push bp
+	push ds
+	push dx
+	push ax
+	mov ax, str_buf
+	mov ds, ax
+	pop ax
+	mov ecx, 1000
+	mov edx, 0
+	div cx,
+	cmp al, 0
+	jz empty
+	add al, 0x30
+	jmp asc
+empty:
+	mov al, ' '
+asc:
+	mov [bx],al
+	mov ax,dx
+	mov ecx, 100
+	mov edx, 0
+	div cx,
+	add al, 0x30
+	mov [bx+1],al
+	mov ax,dx
+	mov ecx, 10
+	mov edx, 0
+	div cx,
+	add al, 0x30
+	mov [bx+2],al
+	mov ax,dx
+	add al, 0x30
+	mov [bx+3],al
+	pop dx
+	pop ds
+	pop bp
+	pop es
+	ret
+
+
+jmp $
+
+times 510-($-$$) db 0
+db 0x55, 0xaa
+
+
+
 mov ax, 0x4F02
         mov bx, 0x010F
 ;        mov bx, 0x0112
@@ -59,7 +194,7 @@ mov ax, 0x4F02
 
 
 	mov ax, 0x8F
-	mov ds, ax 
+	mov ds, ax
 	mov al, 24
 	mov [0], al
 	mov ax,0x900
@@ -239,5 +374,3 @@ c2:
     jnz draw
     jmp $
 
-    times 510-($-$$) db 0
-    db 0x55, 0xaa
