@@ -27,6 +27,10 @@ gdt_ptr dw GDT_LIMIT
 g_model dw 0
 g_model2 dw 0
 
+g_sel_x dw 0
+g_sel_y dw 0
+g_sel_bits db 0
+
 start:
     mov ah,3
     mov bh,0
@@ -103,6 +107,30 @@ show_select:
 	mov cx, bx
 	mov bx, 4 ; 0 page, color 
 	call  printf
+
+	mov eax,0
+	mov bx, 0
+	mov ax, [gs:g_sel_x]
+	call int_cat
+
+	mov al, 'x'
+	call char_cat
+
+	mov ax, [gs:g_sel_y]
+	call int_cat
+
+	mov al, ':'
+	call char_cat
+
+	mov al, [gs:g_sel_bits]
+	call int_cat
+	mov cx, bx
+	mov bx, 4 ; 0 page, color 
+	call  printf
+
+;jmp $
+jmp show_pic
+
 jmp $
 show_error:
 	mov ax, 0
@@ -276,6 +304,7 @@ getInfo:
 
 	mov eax,0
 	mov ax, [es:0x12]
+	mov [gs:g_sel_x],ax
 	call int_cat
 
 	mov al, 'x'
@@ -283,6 +312,7 @@ getInfo:
 
 	mov eax,0
 	mov ax, [es:0x14]
+	mov [gs:g_sel_y],ax
 	call int_cat
 
 	mov al, ':'
@@ -290,6 +320,7 @@ getInfo:
 
 	mov eax,0
 	mov al, [es:0x19]
+	mov [gs:g_sel_bits],al
 	push ax
 	call int_cat
 
@@ -310,10 +341,14 @@ getInfo:
 
 jmp $
 
-
-mov ax, 0x4F02
-;        mov bx, 0x010F
-        mov bx, 0x0112
+show_pic:
+	mov ebx, 0
+	mov ax, 0x4F02
+        mov bx, [gs:g_model]
+	cmp bx, 0
+	jnz use24
+        mov bx, [gs:g_model2]
+use24:
         int 10h
 
 ;jmp liner
@@ -396,73 +431,6 @@ liner:
 		mov byte [es:23],bh
 
 
-;I will create a 'flat' hard disk image with
-;  cyl=20
-;  heads=16
-;  sectors per track=63
-;  total sectors=20160
-;  total size=9.84 megabytes;
-
-
-        mov        BX,    0         ; ES:BX表示读到内存的地址 0x0800*16 + 0 = 0x8000
-        mov ax, 0x900
-        mov es, ax
-        mov            ch,0 ;CH = low eight bits of cylinder number
-        mov            cl,3 ;CL = sector number 1-63 (bits 0-5)
-        MOV        DH,00H   ;DH = head number
-
-load_left:
-        call sectorload
-        inc cl
-        cmp cl, 64
-        jnz load_left
-        inc dh
-        mov cl,1
-        cmp dh,16
-        jnz load_left
-
-        mov dh,0
-        inc ch
-        cmp ch, 3
-        jnz load_left
-        jmp done
-
-sectorload:
-        MOV        AH,02H            ; AH=0x02 : AH设置为0x02表示读取磁盘
-        MOV        AL,1            ; 要读取的扇区数
-        MOV        DL,80H           ; 驱动器号，0表示第一个软盘，是的，软盘。。硬盘C:80H C 硬盘D:81H
-        INT        13H               ; 调用BIOS 13号中断，磁盘相关功能
-        JC  error
-        mov ax,es
-        add ax,32; 512 / 16
-        mov es,ax
-        cmp ax,0x3000
-        jz done
-        ret
-
-error:
-jmp $
-done:
-;----DISK - READ SECTOR(S) INTO MEMORY
-;AH = 02h
-;AL = number of sectors to read (must be nonzero)
-;CH = low eight bits of cylinder number
-;CL = sector number 1-63 (bits 0-5)
-;high two bits of cylinder (bits 6-7, hard disk only)
-;DH = head number
-;DL = drive number (bit 7 set for hard disk)
-;ES:BX -> data buffer
-;
-;Return:
-;CF set on error
-;if AH = 11h (corrected ECC error), AL = burst length
-;CF clear if successful
-;AH = status (see #00234)
-;AL = number of sectors transferred (only valid if CF set for some
-;BIOSes)
-
-
-;=============== 
         ; 打开A20地址线
         in al, 0x92
         or al, 00000010B
@@ -495,27 +463,51 @@ p_mode_start:
     mov ecx, 0
     mov edx, 0
 
+    mov ax, [g_sel_bits]
+    jz draw_24
+draw_32:
 	mov eax, 0
 	mov ebx, 0
 	mov ecx, 220*3 +640*3*140
 	mov edx, 0 
     ;ebx line pos,   edx, img pos,  ecx,graph pos
-draw:
+.draw:
     mov byte al, [ds:ebx+edx+0x9000]
 	;mov byte al, 0xF0
     mov byte [gs:ebx+ecx],al
     inc ebx
     cmp ebx,600
-    jnz c2
+    jnz .c2
     mov ebx,0
     add ecx,480*4
     add edx,600
-c2:
+.c2:
     cmp edx,600*200
-    jnz draw
+    jnz .draw
     jmp $
 
 
+draw_24:
+	mov eax, 0
+	mov ebx, 0
+	mov ecx, 640*3*140
+	mov edx, 0 
+    ;ebx line pos,   edx, img pos,  ecx,graph pos
+.draw:
+    mov byte al, [ds:ebx+edx+0x9000]
+	;mov byte al, 0xF0
+    mov byte [gs:ebx+ecx],al
+    inc ebx
+    cmp ebx,600
+    jnz .c2
+    mov ebx,0
+    add ecx,480*4
+    add edx,600
+.c2:
+    cmp edx,600*200
+    jnz .draw
+
+    jmp $
 
 
 section loader vstart=0x9000
