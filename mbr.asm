@@ -10,6 +10,8 @@ str_buf equ 0x100
 SECTION MBR vstart=0x7c00
     mov sp, 0x7c00
 	mov esi,0
+	mov ax, 0
+	mov gs, ax
 	jmp start
 
 
@@ -23,12 +25,12 @@ SELECTOR_code	equ (0x0003 << 3)
 gdt_ptr dw GDT_LIMIT
         dd 0x0000900
 
+g_model dw 0
+
 start:
     mov ah,3
     mov bh,0
     int 0x10
-
-;jmp test
 
 	;---- es:di
 	mov ax, str_buf
@@ -39,6 +41,7 @@ start:
 
 	mov dx,0
 	mov cx, 5
+	mov bx, 3 ; 0 page, color 
 	call printf
 
 	mov ax, [es:0x0E]
@@ -50,45 +53,49 @@ next_gmode:
 	mov cx, [ds:si]
 	cmp cx, 0xFFFF
 	jz end
-	mov di, 0
-	mov ax, 0x92
-	mov es, ax
-	mov ax, 0x4F01
-	int 10h
 
-	mov eax,0
-	mov ax, [es:0x12]
-	mov bx, 0
-	call int_cat
+	push cx
+	mov bx,0
+	call getInfo
+	pop cx
 
-	mov al, 'x'
-	mov bx, 4
-	call char_cat
-
-	mov eax,0
-	mov ax, [es:0x14]
-	mov bx, 5
-	call int_cat
-
-	mov al, 'x'
-	mov bx, 9
-	call char_cat
-
-	mov eax,0
-	mov al, [es:0x19]
 	cmp al,24
+	jnz not_24bit
+	mov [gs:g_model],cx
+not_24bit:
 	jc skip_cur
-	mov bx, 10
-	call int_cat
 
-	mov ecx, 14
+	mov ecx, 0
+	mov cx, bx
+	mov bx, 3 ; 0 page, color 
 	call  printf
 
 skip_cur:
-	inc si
+	add si,2
 	jmp next_gmode
 
 end:
+	mov bx, 0
+	mov al, 'F'
+	call char_cat
+	mov al, 'i'
+	call char_cat
+	mov al, 'n'
+	call char_cat
+	mov al, 'a'
+	call char_cat
+	mov al, 'l'
+	call char_cat
+	mov al, ':'
+	call char_cat
+	
+	mov ecx, 0
+	mov cx, [gs:g_model]
+	call getInfo
+	mov ecx, 0
+	mov cx, bx
+	mov bx, 4 ; 0 page, color 
+	call  printf
 jmp $
 
 	;-- cx len  es:bp str
@@ -99,13 +106,16 @@ jmp $
 ;ES:BP -> string to write
 printf:
 	push es
+	push bp
 	mov ax, str_buf
 	mov es, ax
+	mov bp, 0
 	mov ax, 0x1301
-	mov bx, 3
+;	mov bx, 4 ; 0 page, color 
 	mov dl, 0
     int 10h
 	inc dh
+	pop bp
 	pop es
 	ret
 
@@ -118,15 +128,71 @@ char_cat:
 	pop ax
 	mov [bx],al
 	pop ds
+	inc bx
+	ret
+
+    ; input al ,out put al
+hex_4bit:
+	cmp al,10
+	jnc .hex_AF
+	add al, '0'
+	jmp .hex_out
+.hex_AF:
+	sub al, 10
+	add al, 'A'
+.hex_out:
+	ret
+
+hex_cat:
+	push dx
+	push ds
+	push ax
+	mov ax, str_buf
+	mov ds, ax
+	pop ax
+	mov edx,0
+	mov dx,ax
+
+	mov al,dh
+	and al,0xF0
+	shr al,4
+	call hex_4bit
+	mov [bx],al
+	inc bx
+
+	mov al,dh
+	and al,0x0F
+	call hex_4bit
+	mov [bx],al
+	inc bx
+
+	mov al,dl
+	and al,0xF0
+	shr al,4
+	call hex_4bit
+	mov [bx],al
+	inc bx
+
+	mov al,dl
+	and al,0x0F
+	call hex_4bit
+	mov [bx],al
+	inc bx
+
+	pop ds
+	pop dx
 	ret
 
 	;-- ax the int, bx -pos
 int_cat:
+	push cx
 	push es
+	push di
 	push bp
 	push ds
 	push dx
 	push ax
+	mov di, 0
 	mov ax, str_buf
 	mov ds, ax
 	pop ax
@@ -136,6 +202,7 @@ int_cat:
 	cmp al, 0
 	jz empty
 	add al, 0x30
+	mov di,1
 	jmp asc
 empty:
 	mov al, ' '
@@ -145,7 +212,16 @@ asc:
 	mov ecx, 100
 	mov edx, 0
 	div cx,
+	cmp al,0
+	jz empty2
+has_z:
 	add al, 0x30
+	jmp asc2
+empty2:
+	cmp di, 0
+	jnz has_z
+	mov al, ' '
+asc2:
 	mov [bx+1],al
 	mov ax,dx
 	mov ecx, 10
@@ -159,9 +235,62 @@ asc:
 	pop dx
 	pop ds
 	pop bp
-	pop es
+	pop di
+	pop es  
+	pop cx
+	add bx, 4
 	ret
 
+	;--bx
+getInfo:
+	mov di, 0
+	mov ax, 0x92
+	mov es, ax
+	mov ax, 0x4F01
+	int 10h
+
+	cmp ax, 0x004F
+	jnz .out
+
+	mov ax,cx
+	call hex_cat
+
+	mov al, ' '
+	call char_cat
+
+	mov eax,0
+	mov ax, [es:0x12]
+	call int_cat
+
+	mov al, 'x'
+	call char_cat
+
+	mov eax,0
+	mov ax, [es:0x14]
+	call int_cat
+
+	mov al, ':'
+	call char_cat
+
+	mov eax,0
+	mov al, [es:0x19]
+	push ax
+	call int_cat
+
+	mov al, 'b'
+	call char_cat
+
+	mov al, 'i'
+	call char_cat
+
+	mov al, 't'
+	call char_cat
+
+	mov al, 's'
+	call char_cat
+	pop ax
+.out:
+	ret
 
 jmp $
 
