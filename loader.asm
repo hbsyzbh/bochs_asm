@@ -30,6 +30,7 @@ g_model2 dw 0
 g_sel_x dw 0
 g_sel_y dw 0
 g_sel_bits db 0
+g_liner_addr dd 0
 
 start:
     mov ah,3
@@ -64,6 +65,7 @@ next_gmode:
 	pop cx
 
 	cmp al,24
+	;cmp al,25  ;-- debug 32bits
 	jnz not_24bit
 	mov [gs:g_model],cx
 not_24bit:
@@ -128,7 +130,6 @@ show_select:
 	mov bx, 4 ; 0 page, color 
 	call  printf
 
-;jmp $
 jmp show_pic
 
 jmp $
@@ -319,9 +320,18 @@ getInfo:
 	call char_cat
 
 	mov eax,0
+	mov ax, [es:0x2A]
+	mov [gs:g_liner_addr+2],ax
+	call hex_cat
+	mov eax,0
+	mov ax, [es:0x28]
+	mov [gs:g_liner_addr],ax
+	call hex_cat
+
+	mov eax,0
 	mov al, [es:0x19]
 	mov [gs:g_sel_bits],al
-	push ax
+	push ax ;--save bits
 	call int_cat
 
 	mov al, 'b'
@@ -339,17 +349,17 @@ getInfo:
 .out:
 	ret
 
-jmp $
+jmp $ ;-- should nerver come here
 
 show_pic:
 	mov ebx, 0
 	mov ax, 0x4F02
-        mov bx, [gs:g_model]
+	mov bx, [gs:g_model]
 	cmp bx, 0
 	jnz use24
-        mov bx, [gs:g_model2]
+	mov bx, [gs:g_model2]
 use24:
-        int 10h
+	int 10h
 
 ;jmp liner
 ;jmp enter_pm
@@ -414,15 +424,7 @@ use24:
 		mov ax, 0
 		mov ds, ax
 liner:
-
-        mov ax, 0x900
-        mov es, ax
-        mov di, 0
-        mov ax, 0x4F01
-        mov cx, 0x101
-        int 0x10
-
-        mov ebx, [es:40]   ;ebx liner video memery addr
+        mov ebx, [gs:g_liner_addr]   ;ebx liner video memery addr
 		mov ax, 0x90
 		mov es, ax
 		mov word [es:18],bx
@@ -463,23 +465,85 @@ p_mode_start:
     mov ecx, 0
     mov edx, 0
 
-    mov ax, [g_sel_bits]
+    mov al, [g_sel_bits]
+	cmp al, 24
     jz draw_24
+	jmp draw_32
+
+jmp $ ; -- should never come here
+
+	; in ebx  out ax
+get_img_line_pos:
+	mov eax, ebx
+	push edx
+	push ebx
+	mov ebx,3
+	mul ebx
+	mov esi, eax
+	pop ebx
+	pop edx
+	ret
+
+get_32_graph_line_pos:
+	mov eax, ebx
+	push edx
+	push ebx
+	mov ebx,4
+	mul ebx
+	mov esi, eax
+	pop ebx
+	pop edx
+	ret
+
 draw_32:
+	; x - 200 / 2
+	mov eax, 0
+	mov ax, [g_sel_x]
+	sub ax, 200
+	shr ax, 1
+	mov ebx, 4
+	mul bx
+	mov ecx, eax
+	
+	mov eax, 0
+	mov ax, [g_sel_x]
+	mov ebx, 0
+	mov bx, [g_sel_y]
+	sub bx, 200
+	shr bx, 1
+	mul ebx
+	shl eax,2  ;-- x 4
+	add ecx, eax
+
 	mov eax, 0
 	mov ebx, 0
-	mov ecx, 220*3 +640*3*140
-	mov edx, 0 
+;	mov ecx, 0
+	mov edx, 0
     ;ebx line pos,   edx, img pos,  ecx,graph pos
 .draw:
-    mov byte al, [ds:ebx+edx+0x9000]
-	;mov byte al, 0xF0
-    mov byte [gs:ebx+ecx],al
+	call get_img_line_pos
+	mov al, 0x0
+	shl eax, 8
+    mov byte al, [ds:esi+edx+img+2]
+	shl eax, 8
+    mov byte al, [ds:esi+edx+img+1]
+	shl eax , 8
+    mov byte al, [ds:esi+edx+img+0]
+	push eax
+	call get_32_graph_line_pos
+	pop eax
+    mov [gs:esi+ecx],eax
+
     inc ebx
-    cmp ebx,600
+    cmp ebx,200
     jnz .c2
     mov ebx,0
-    add ecx,480*4
+    mov bx,[g_sel_x]
+    add ecx,ebx
+    add ecx,ebx
+    add ecx,ebx
+    add ecx,ebx
+    mov ebx,0
     add edx,600
 .c2:
     cmp edx,600*200
@@ -488,20 +552,41 @@ draw_32:
 
 
 draw_24:
+	; x - 200 / 2
 	mov eax, 0
+	mov ax, [g_sel_x]
+	sub ax, 200
+	shr ax, 1
+	mov ebx, 3
+	mul bx
+	mov ecx, eax
+	
+	mov eax, 0
+	mov ax, [g_sel_x]
 	mov ebx, 0
-	mov ecx, 640*3*140
-	mov edx, 0 
+	mov bx, [g_sel_y]
+	sub bx, 200
+	shr bx, 1
+	mul ebx
+	add ecx, eax
+	add ecx, eax
+	add ecx, eax
+
+	mov edx, 0
+	mov ebx, 0
     ;ebx line pos,   edx, img pos,  ecx,graph pos
 .draw:
-    mov byte al, [ds:ebx+edx+0x9000]
-	;mov byte al, 0xF0
+    mov byte al, [ds:ebx+edx+img]
     mov byte [gs:ebx+ecx],al
     inc ebx
-    cmp ebx,600
+    cmp ebx, 600
     jnz .c2
+	mov ebx,0
+    mov bx,[g_sel_x]
+    add ecx,ebx
+    add ecx,ebx
+    add ecx,ebx
     mov ebx,0
-    add ecx,480*4
     add edx,600
 .c2:
     cmp edx,600*200
@@ -509,9 +594,6 @@ draw_24:
 
     jmp $
 
-
-section loader vstart=0x9000
-[bits 32]
 img
 %include "/media/sf_build_bpi_lede/200x200.txt"
 ;%include "/media/sf_build_bpi_lede/hua.txt"
