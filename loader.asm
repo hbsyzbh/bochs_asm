@@ -82,6 +82,32 @@ skip_cur:
 	jmp next_gmode
 
 end:
+	mov cx, 5
+show_count_down:
+	mov bx, 0
+	mov al, '0'
+	add al, cl
+	add al, dl
+	call char_cat
+	mov al, 's'
+	call char_cat
+	mov al, 'e'
+	call char_cat
+	mov al, 'c'
+	call char_cat
+	mov al, 's'
+	push cx
+	mov cx, bx
+	mov bx, 5 ; 0 page, color
+	call  printf
+	nop
+	call dealy_1_sec
+	pop cx
+	dec cx
+	cmp cx, 0
+	jnz	show_count_down
+	
+
 	mov bx, 0
 	mov al, 'F'
 	call char_cat
@@ -103,6 +129,8 @@ end:
 	mov cx, [gs:g_model2]
 	cmp cx, 0
 	jz show_error
+
+
 show_select:
 	call getInfo
 	mov ecx, 0
@@ -130,7 +158,33 @@ show_select:
 	mov bx, 4 ; 0 page, color 
 	call  printf
 
+   call dealy_1_sec
+   call dealy_1_sec
 jmp show_pic
+
+dealy_1_sec:
+	push cx
+	push dx
+	push bx
+
+;	mov ax, 0
+;	int 0x1A
+;	mov bx,dx
+;	add bx,20
+;.wait
+;	int 0x1A
+;	cmp bx, dx
+;	jnz .wait
+;	
+
+	mov ax,0x8600
+    mov cx,0xf
+    mov dx,0x4240
+    int 15h
+    pop bx
+	pop dx
+	pop cx
+	ret
 
 jmp $
 show_error:
