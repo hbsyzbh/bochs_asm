@@ -66,16 +66,18 @@ next_gmode:
 
 	cmp al,24
 	;cmp al,25  ;-- debug 32bits
+	jc skip_cur
 	jnz not_24bit
 	mov [gs:g_model],cx
 not_24bit:
-	jc skip_cur
 
 	mov [gs:g_model2],cx
 	mov ecx, 0
 	mov cx, bx
 	mov bx, 3 ; 0 page, color 
 	call  printf
+
+	jmp final
 
 skip_cur:
 	add si,2
@@ -105,9 +107,9 @@ show_count_down:
 	pop cx
 	dec cx
 	cmp cx, 0
-	jnz	show_count_down
+	jnz show_count_down
 	
-
+final:
 	mov bx, 0
 	mov al, 'F'
 	call char_cat
