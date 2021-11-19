@@ -1,5 +1,12 @@
 SECTION MBR vstart=0x7c00
 	mov sp, 0x7c00
+		mov bp, msg
+		mov ax, 0x1301
+		mov cx, 21
+		mov bx, 3
+		mov dl, 0
+		int 10h
+
         mov        BX,    0         ; ES:BX表示读到内存的地址 0x0800*16 + 0 = 0x8000
         mov ax, 0x800
         mov es, ax
@@ -41,6 +48,8 @@ jmp $
 done:
 jmp 0x8000
 jmp $
+
+msg db 'MBR loading from disk'
 
 times 446-($-$$) db 0
 db 0x80 ; active flag
