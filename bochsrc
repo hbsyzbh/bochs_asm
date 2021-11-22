@@ -8,8 +8,8 @@ megs: 32
 # 对应真实机器的VGA bios
 #vgaromimage: file=/usr/local/Cellar/bochs/2.6.9_2/share/bochs/VGABIOS-lgpl-latest
 romimage: file=$BXSHARE/BIOS-bochs-latest
-#vgaromimage: file=$BXSHARE/VGABIOS-lgpl-latest
-vgaromimage: file=/media/sf_build_bpi_lede/VGABIOS-lgpl-latest
+vgaromimage: file=$BXSHARE/VGABIOS-lgpl-latest
+#vgaromimage: file=/media/sf_build_bpi_lede/VGABIOS-lgpl-latest
 vga: extension=vbe
 # 启动方式
 boot: disk
