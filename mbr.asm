@@ -1,11 +1,19 @@
 SECTION MBR vstart=0x7c00
 	mov sp, 0x7c00
-		mov bp, msg
-		mov ax, 0x1301
-		mov cx, 21
-		mov bx, 3
-		mov dl, 0
-		int 10h
+mov ax, 0x4100
+mov bx, 0x55aa
+mov dx, 0x0080
+int 0x13
+cmp bx, 0xaa55
+jz lba_read
+
+; check CHS param
+mov ax, 0
+mov es, ax
+mov di, ax
+mov ax, 0x0800
+mov dx, 0x0080
+int 0x13
 
         mov        BX,    0         ; ES:BX表示读到内存的地址 0x0800*16 + 0 = 0x8000
         mov ax, 0x800
@@ -49,7 +57,32 @@ done:
 jmp 0x8000
 jmp $
 
-msg db 'MBR loading from disk'
+lba_addrs_para db 0x10,0
+lba_blocks dw 64
+lba_buff_i dw 0x0000
+lba_buff dw 0x0800
+lba_start dq 2, 0
+lba_read:
+	push ds
+	mov dx, 0x0080
+	mov ax, 0
+	mov ds, ax
+	mov es, ax
+	mov si, lba_addrs_para
+	mov cx, 4
+.next:
+	mov ax, 0x4200
+	int 0x13
+	mov eax, [lba_start]
+	add eax,64
+	mov [lba_start],eax
+	mov eax, [lba_buff]
+	add eax,64/16 * 512
+	mov [lba_buff],eax
+	loop .next
+	pop ds
+jmp done
+	
 
 times 446-($-$$) db 0
 db 0x80 ; active flag
