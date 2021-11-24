@@ -86,15 +86,15 @@ jmp done
 
 times 446-($-$$) db 0
 db 0x80 ; active flag
-;db 0x0 ;  start head
-;db 0x1 ;  start sector
-;db 0x0 ; start cylinder
-;db 0x0 ; filesytem type
-;db 16 ;  end head
-;db 63 ;  end sector
-;db 20 ;  end cylinder
-;dw 1 ;  offset sector
-;dw 20159 ;  end  sector
+db 0x0 ;  start head
+db 0x3 ;  start sector
+db 0x0 ; start cylinder
+db 0x0 ; filesytem type
+db 16 ;  end head
+db 63 ;  end sector
+db 20 ;  end cylinder
+dd 3 ;  offset sector
+dd 20157 ;  sector counter
 ;
 times 510-($-$$) db 0
 db 0x55, 0xaa
